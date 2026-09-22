@@ -1,1 +1,330 @@
 
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DompetKu - Pencatat Keuangan</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="theme-color" content="#0d6efd">
+    
+    <!-- Elemen Link Manifest Dinamis -->
+    <link id="dynamic-manifest" rel="manifest">
+
+    <style>
+        :root { --primary: #0d6efd; --income: #198754; --expense: #dc3545; }
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card { border-radius: 16px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-2px); }
+        .btn-custom { border-radius: 12px; font-weight: 600; padding: 10px; }
+        .form-control, .form-select { border-radius: 10px; }
+        .list-group-item { border-radius: 12px !important; margin-bottom: 10px; border: 1px solid #eaeaea; display: flex; justify-content: space-between; align-items: center; }
+        .text-income { color: var(--income); font-weight: bold; }
+        .text-expense { color: var(--expense); font-weight: bold; }
+        .chart-container { position: relative; height: 250px; width: 100%; margin: auto; }
+        #installBtn { display: none; border-radius: 20px; font-weight: bold; }
+        .empty-state { text-align: center; color: #adb5bd; padding: 20px; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-primary mb-4 shadow">
+    <div class="container d-flex justify-content-between">
+        <span class="navbar-brand mb-0 h1 fw-bold">💸 DompetKu</span>
+        <button id="installBtn" class="btn btn-warning btn-sm shadow-sm">📥 Install Aplikasi</button>
+    </div>
+</nav>
+
+<div class="container pb-5">
+    <!-- Ringkasan Saldo -->
+    <div class="row mb-4">
+        <div class="col-12 text-center mb-3">
+            <h6 class="text-secondary text-uppercase fw-bold">Total Saldo</h6>
+            <h1 id="totalBalance" class="fw-bold">Rp 0</h1>
+        </div>
+        <div class="col-6">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center p-3">
+                    <small>Pemasukan</small>
+                    <h5 id="totalIncome" class="mb-0 mt-1 fw-bold">Rp 0</h5>
+                </div>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="card bg-danger text-white">
+                <div class="card-body text-center p-3">
+                    <small>Pengeluaran</small>
+                    <h5 id="totalExpense" class="mb-0 mt-1 fw-bold">Rp 0</h5>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Kolom Form & Grafik -->
+        <div class="col-md-5 mb-4">
+            <div class="card mb-4">
+                <div class="card-body p-4">
+                    <h5 class="card-title fw-bold mb-3">Tulis Transaksi</h5>
+                    <form id="transactionForm">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small">Jenis Transaksi</label>
+                            <select id="type" class="form-select" required>
+                                <option value="income">Pemasukan (+)</option>
+                                <option value="expense">Pengeluaran (-)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small">Keterangan</label>
+                            <input type="text" id="desc" class="form-control" placeholder="Contoh: Gaji, Makan, Listrik" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label text-muted small">Nominal (Rp)</label>
+                            <input type="number" id="amount" class="form-control" placeholder="0" min="1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 btn-custom shadow-sm">Simpan Transaksi</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-body p-3 text-center">
+                    <h6 class="fw-bold text-muted mb-3">Statistik Keuangan</h6>
+                    <div class="chart-container">
+                        <canvas id="financeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kolom Riwayat Transaksi -->
+        <div class="col-md-7">
+            <div class="card h-100">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h5 class="card-title fw-bold mb-0">Riwayat Terakhir</h5>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="clearAllData()">Reset Data</button>
+                    </div>
+                    <ul id="transactionList" class="list-group list-group-flush p-0">
+                        <!-- Data List dari JavaScript -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Library Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    /* =========================================
+       BAGIAN 1: PWA SETUP (MANIFEST & SW)
+    ========================================= */
+    // 1. Generate Manifest Dinamis
+    const manifestData = {
+        name: "DompetKu - Aplikasi Keuangan",
+        short_name: "DompetKu",
+        start_url: location.href,
+        display: "standalone",
+        background_color: "#f4f6f9",
+        theme_color: "#0d6efd",
+        icons: [{
+            src: "https://cdn-icons-png.flaticon.com/512/3135/3135679.png",
+            sizes: "512x512",
+            type: "image/png"
+        }]
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
+    document.getElementById('dynamic-manifest').href = URL.createObjectURL(manifestBlob);
+
+    // 2. Generate Service Worker Dinamis
+    const swCode = `
+        self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+        self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+        self.addEventListener('fetch', e => {
+            e.respondWith(
+                fetch(e.request).catch(() => {
+                    return new Response("Kamu sedang offline, tapi aplikasi masih bisa digunakan!");
+                })
+            );
+        });
+    `;
+    const swBlob = new Blob([swCode], { type: 'application/javascript' });
+    
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register(URL.createObjectURL(swBlob))
+            .then(() => console.log('✅ Service Worker Aktif'))
+            .catch(err => console.log('❌ SW Gagal:', err));
+    }
+
+    // 3. Logika Tombol Install (Add to Home Screen)
+    let deferredPrompt;
+    const installBtn = document.getElementById('installBtn');
+    
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.style.display = 'block';
+    });
+
+    installBtn.addEventListener('click', async () => {
+        installBtn.style.display = 'none';
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') console.log('Aplikasi Diinstal');
+        deferredPrompt = null;
+    });
+
+    /* =========================================
+       BAGIAN 2: LOGIKA APLIKASI KEUANGAN
+    ========================================= */
+    const formatRupiah = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
+    
+    let transactions = JSON.parse(localStorage.getItem('dompetku_data')) || [];
+    let financeChart;
+
+    const listEl = document.getElementById('transactionList');
+    const formEl = document.getElementById('transactionForm');
+
+    function init() {
+        listEl.innerHTML = '';
+        let tIncome = 0, tExpense = 0;
+
+        if (transactions.length === 0) {
+            listEl.innerHTML = '<div class="empty-state">Belum ada transaksi. Silakan tambahkan!</div>';
+        } else {
+            // Urutkan dari yang terbaru
+            const sortedTransactions = [...transactions].reverse();
+            
+            sortedTransactions.forEach(t => {
+                if (t.type === 'income') tIncome += t.amount;
+                else tExpense += t.amount;
+
+                // XSS Protection via createElement
+                const li = document.createElement('li');
+                li.className = 'list-group-item shadow-sm';
+                
+                const descDiv = document.createElement('div');
+                const strongTitle = document.createElement('strong');
+                strongTitle.textContent = t.desc; // Aman dari injeksi script
+                const dateSmall = document.createElement('small');
+                dateSmall.className = 'text-muted d-block';
+                dateSmall.textContent = t.date;
+                
+                descDiv.appendChild(strongTitle);
+                descDiv.appendChild(dateSmall);
+
+                const actionDiv = document.createElement('div');
+                actionDiv.className = 'd-flex align-items-center';
+                
+                const amountSpan = document.createElement('span');
+                amountSpan.className = t.type === 'income' ? 'text-income me-3' : 'text-expense me-3';
+                amountSpan.textContent = (t.type === 'income' ? '+ ' : '- ') + formatRupiah(t.amount);
+                
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn btn-sm btn-outline-danger';
+                delBtn.textContent = '🗑️';
+                delBtn.onclick = () => deleteTransaction(t.id);
+
+                actionDiv.appendChild(amountSpan);
+                actionDiv.appendChild(delBtn);
+
+                li.appendChild(descDiv);
+                li.appendChild(actionDiv);
+                listEl.appendChild(li);
+            });
+        }
+
+        const tBalance = tIncome - tExpense;
+        
+        // Update DOM dengan animasi sederhana
+        document.getElementById('totalBalance').innerText = formatRupiah(tBalance);
+        document.getElementById('totalIncome').innerText = formatRupiah(tIncome);
+        document.getElementById('totalExpense').innerText = formatRupiah(tExpense);
+
+        updateChart(tIncome, tExpense);
+    }
+
+    formEl.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const type = document.getElementById('type').value;
+        const desc = document.getElementById('desc').value.trim();
+        const amount = Number(document.getElementById('amount').value);
+
+        if(!desc || amount <= 0) return alert("Isi form dengan benar!");
+
+        const transaction = {
+            id: Date.now(),
+            type,
+            desc,
+            amount,
+            date: new Date().toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        };
+
+        transactions.push(transaction);
+        updateStorage();
+        init();
+        formEl.reset();
+        document.getElementById('desc').focus();
+    });
+
+    function deleteTransaction(id) {
+        if(confirm("Yakin ingin menghapus transaksi ini?")) {
+            transactions = transactions.filter(t => t.id !== id);
+            updateStorage();
+            init();
+        }
+    }
+
+    function clearAllData() {
+        if(transactions.length === 0) return alert("Data sudah kosong!");
+        if(confirm("PERINGATAN: Semua data akan dihapus permanen! Lanjutkan?")) {
+            transactions = [];
+            updateStorage();
+            init();
+        }
+    }
+
+    function updateStorage() {
+        localStorage.setItem('dompetku_data', JSON.stringify(transactions));
+    }
+
+    function updateChart(income, expense) {
+        const ctx = document.getElementById('financeChart').getContext('2d');
+        
+        // Bug Fix: Hancurkan instance chart lama agar tidak bertumpuk/error saat di-hover
+        if (financeChart) financeChart.destroy();
+        
+        // Handle jika data masih 0 (Blank state chart)
+        const hasData = income > 0 || expense > 0;
+        
+        financeChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: hasData ? ['Pemasukan', 'Pengeluaran'] : ['Belum Ada Data'],
+                datasets: [{
+                    data: hasData ? [income, expense] : [1],
+                    backgroundColor: hasData ? ['#198754', '#dc3545'] : ['#e9ecef'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: { enabled: hasData } // Nonaktifkan tooltip jika kosong
+                }
+            }
+        });
+    }
+
+    // Jalankan pertama kali saat halaman di-load
+    init();
+</script>
+</body>
+</html>
